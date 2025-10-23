@@ -130,3 +130,6 @@ pyproject.toml (I have attached this in the chat)
 README.md
 
 I for now just want a setup where the index.html page gets hosted with flask and flask-socketio (eventlet) I will ask you to add some other logic later - but keep it to what I am asking in this message for now. I have attached my pyproject.toml as well.
+
+# NYT PROMPT:
+How about editing the cfg.json file in the browser of the Raspberry Pi Zero 2W? I want to be able to edit things such as its static ip address, its gpio (give them names, enable/disable them) etc.?
