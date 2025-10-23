@@ -1,0 +1,21 @@
+# Environment
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# Data
+/data/logs/*
+!/data/logs/.gitkeep
+/data/cfg.json
+
+# MacOS
+.DS_Store
