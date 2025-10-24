@@ -133,3 +133,9 @@ I for now just want a setup where the index.html page gets hosted with flask and
 
 # NYT PROMPT:
 How about editing the cfg.json file in the browser of the Raspberry Pi Zero 2W? I want to be able to edit things such as its static ip address, its gpio (give them names, enable/disable them) etc.?
+
+Awesome! Now I have a pretty big one this time. I want to be able to view older log files in the same terminal as well. I would like that the button that says "Share" is a dropdown/up menu where you can select from a list of logfiles (those present in the logs folder). This will need to be in the same terminal where you can scroll and download it as well - just like the current viewer.
+
+The routes should maybe be changed then. So when you click the "Viewer" button in the navigation bar on the top of the site it will redirect you to "/logs/current" and with the old ones it will be "/logs/<filename>" instead.
+
+I will send you what I have so far so you can see if you need some more stuff on the backend to make this work.
