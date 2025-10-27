@@ -139,3 +139,43 @@ Awesome! Now I have a pretty big one this time. I want to be able to view older 
 The routes should maybe be changed then. So when you click the "Viewer" button in the navigation bar on the top of the site it will redirect you to "/logs/current" and with the old ones it will be "/logs/<filename>" instead.
 
 I will send you what I have so far so you can see if you need some more stuff on the backend to make this work.
+
+I now want to be able to control the GPIO pins on the Raspberry Pi through the web interface/page. Can you help me make it possible to see the pins from the config on the index.html page as "cards" or grids where I can toggle them on/off. This should live update in the config file and then control the pins on the Raspberry Pi. What is the best way of doing this? Let me know if you need my files again.
+
+It looks great. Thank you!
+The next thing I would like is that when you click "Add GPIO" it opens up a modal/pop-up inside of the page where you can select the pin from a list that I need to create, select if it is a input/output (if stated in the list that the GPIO is capable of that), and set the name. I would also like that you revisit the cards/grids and replace the rename with this icon:
+
+<svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 512 512" height="200px" width="200px" xmlns="http://www.w3.org/2000/svg"><path d="M497.9 142.1l-46.1 46.1c-4.7 4.7-12.3 4.7-17 0l-111-111c-4.7-4.7-4.7-12.3 0-17l46.1-46.1c18.7-18.7 49.1-18.7 67.9 0l60.1 60.1c18.8 18.7 18.8 49.1 0 67.9zM284.2 99.8L21.6 362.4.4 483.9c-2.9 16.4 11.4 30.6 27.8 27.8l121.5-21.3 262.6-262.6c4.7-4.7 4.7-12.3 0-17l-111-111c-4.8-4.7-12.4-4.7-17.1 0zM124.1 339.9c-5.5-5.5-5.5-14.3 0-19.8l154-154c5.5-5.5 14.3-5.5 19.8 0s5.5 14.3 0 19.8l-154 154c-5.5 5.5-14.3 5.5-19.8 0zM88 424h48v36.3l-64.5 11.3-31.1-31.1L51.7 376H88v48z"></path></svg>
+
+Can you make it so that the rename icon is right beside the name of the pin.
+
+And the delete button with this icon:
+
+<svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 448 512" height="200px" width="200px" xmlns="http://www.w3.org/2000/svg"><path d="M32 464a48 48 0 0 0 48 48h288a48 48 0 0 0 48-48V128H32zm272-256a16 16 0 0 1 32 0v224a16 16 0 0 1-32 0zm-96 0a16 16 0 0 1 32 0v224a16 16 0 0 1-32 0zm-96 0a16 16 0 0 1 32 0v224a16 16 0 0 1-32 0zM432 32H312l-9.4-18.7A24 24 0 0 0 281.1 0H166.8a23.72 23.72 0 0 0-21.4 13.3L136 32H16A16 16 0 0 0 0 48v32a16 16 0 0 0 16 16h416a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16z"></path></svg>
+
+Can you make it so that the delete icon is in the top right corner?
+
+I also want a field where if the pin is an input it will display what is being read. If the pin is an output the field will just be greyed out.
+
+Is it possible to have the html you made in the static/main.js inside of the index.html instead or is there a reason you put it in there?
+
+
+Thank you! There are a couple of things I want. Can you make the "+ Add GPIO" a card/grid as well but just with a large "+" inside of it? It should always be to the right of the actual pin/gpio cards/grids.
+I would like that the "rename" icon is a bit smaller and have a circle around it. When clicked it just opens op the line where the name is on the card and allows you to write there.
+The toggle button has ended up inside of the "remove" icon. I would like that the toggle button is in the bottom left corner of the card/grid and then the box where the value is read is just a box not with anything before it.
+
+Is it also possible for you to move the logs javascript into the stream.html file? That will keep the main.js quite minimal.
+
+Can you just generate the entire styles.css as well because I am not good at understanding the changes in there.
+
+styles.css:
+
+It is time to add the final touches. I want to make the log actual useful. I would like to be able to log all the changes made to the pin states, config, what they read, if initialization worked/did not work. If there are something else you think might be a good idea to log plesae add it so I can see :-)
+
+# I NEED A FIX HER ER FEJLEN:
+
+I get this error now:
+
+(.venv) PS C:\Users\AMLY\Documents\Projects\RPi> python -m src [logs] Bound file handler to C:\Users\AMLY\Documents\Projects\RPi\data\logs\2025-10-27.log Traceback (most recent call last): File "C:\Users\AMLY\Documents\Projects\RPi\.venv\Lib\site-packages\eventlet\hubs\selects.py", line 59, in wait listeners.get(fileno, hub.noop).cb(fileno) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^ File "C:\Users\AMLY\Documents\Projects\RPi\.venv\Lib\site-packages\eventlet\greenthread.py", line 272, in main result = function(*args, **kwargs) File "C:\Users\AMLY\Documents\Projects\RPi\.venv\Lib\site-packages\eventlet\wsgi.py", line 911, in process_request self.protocol(conn_state, self) ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^ File "C:\Users\AMLY\Documents\Projects\RPi\.venv\Lib\site-packages\eventlet\wsgi.py", line 371, in __init__ self.finish() ~~~~~~~~~~~^^ File "C:\Users\AMLY\Documents\Projects\RPi\.venv\Lib\site-packages\eventlet\wsgi.py", line 830, in finish BaseHTTPServer.BaseHTTPRequestHandler.finish(self) ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^ File "C:\Users\AMLY\AppData\Local\Programs\Python\Python313\Lib\socketserver.py", line 830, in finish self.wfile.close() ~~~~~~~~~~~~~~~~^^ File "C:\Users\AMLY\AppData\Local\Programs\Python\Python313\Lib\socket.py", line 737, in write return self._sock.send(b) ~~~~~~~~~~~~~~~^^^ File "C:\Users\AMLY\Documents\Projects\RPi\.venv\Lib\site-packages\eventlet\greenio\base.py", line 383, in send return self._send_loop(self.fd.send, data, flags) ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^ File "C:\Users\AMLY\Documents\Projects\RPi\.venv\Lib\site-packages\eventlet\greenio\base.py", line 370, in _send_loop return send_method(data, *args) ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine Removing descriptor: 564
+
+I cannot delete any gpio or do anything when it happens

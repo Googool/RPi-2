@@ -1,19 +1,16 @@
 from __future__ import annotations
 from pathlib import Path
-import json
-from .utils import CFG_SNAP_DIR, cfg_path_for_date, today_str
+import json, os, tempfile
+import logging
 
 # Always resolve to: <project root>/data/cfg.json (one level above src/)
-DEFAULT_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "cfg.json"
-
-# Make it possible to change the address and then run a script to change the raspi-config to that address and make the config mirror that in the config file.
 
 # Default configuration written on first run
 DEFAULT_CFG = {
     "network": {"interface": "wlan0", "mode": "dhcp", "address": None, "gateway": None},
     "gpio": [
-        {"pin": 17, "name": "Power Relay", "mode": "output", "value": 0}
+        {"pin": 17, "name": "Power", "mode": "output", "value": 0}
     ],
 }
 
@@ -32,24 +29,46 @@ def initialize_config(*_ignored) -> Path:
         created_dir = True
 
     if not CONFIG_PATH.exists():
-        CONFIG_PATH.write_text(json.dumps(DEFAULT_CFG, indent=2), encoding="utf-8")
+        # atomic create with default content
+        _atomic_write(CONFIG_PATH, DEFAULT_CFG)
         created_file = True
 
     if created_dir or created_file:
-        print(f"[config] Initialized at {CONFIG_PATH} (dir_created={created_dir}, file_created={created_file})")
+        logging.getLogger(__name__).info(
+            "config_init path=%s dir_created=%s file_created=%s",
+            CONFIG_PATH, created_dir, created_file
+        )
     else:
-        print(f"[config] Found existing config at {CONFIG_PATH}")
+        logging.getLogger(__name__).info(
+            "config_found path=%s", CONFIG_PATH
+        )
 
     return CONFIG_PATH
 
 def load_cfg(path: Path | None = None) -> dict:
-    p = path or initialize_config()
-    return json.loads(Path(p).read_text(encoding="utf-8"))
+    """
+    Load and return the JSON dict from cfg.json (creating it with defaults if missing).
+    """
+    p = Path(path) if path else initialize_config()
+    cfg = json.loads(p.read_text(encoding="utf-8"))
+    logging.getLogger(__name__).debug("config_load path=%s size=%dB", p, len(json.dumps(cfg)))
+    return cfg
 
 def save_cfg(cfg: dict, path: Path | None = None) -> None:
+    """
+    Persist config to cfg.json ONLY (no snapshot directory).
+    Uses an atomic write to avoid partial files on power loss/crash.
+    """
     p = Path(path) if path else initialize_config()
-    p.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
-    # ALSO write a dated snapshot
-    snap = Path(cfg_path_for_date(CFG_SNAP_DIR, today_str()))
-    snap.parent.mkdir(parents=True, exist_ok=True)
-    snap.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    _atomic_write(p, cfg)
+    logging.getLogger(__name__).info("config_save path=%s", p)
+
+def _atomic_write(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # write to temp file in same directory, then replace
+    with tempfile.NamedTemporaryFile("w", delete=False, dir=path.parent, prefix=path.name + ".", suffix=".tmp") as tmp:
+        json.dump(data, tmp, indent=2)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        tmp_name = tmp.name
+    os.replace(tmp_name, path)

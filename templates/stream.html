@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Viewer</title>
+    <title>Stream</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
@@ -13,7 +13,6 @@
       <!-- Sidebar -->
       <aside class="sidebar" role="complementary" aria-label="Sidebar">
         <div class="sidebar-header">
-          <!-- Logo links to index -->
           <a class="logo-svg" aria-label="logo" href="{{ url_for('main.index') }}">
             <svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 495.9 107" aria-hidden="true" focusable="false">
               <style>.st0{fill:#01a3d6;}</style>
@@ -22,7 +21,6 @@
           </a>
         </div>
         <div class="device-info card">
-          <a>Menu</a>
         </div>
         <div class="sidebar-footer">
           <div class="bottom-logo" aria-label="Powered by Raspberry Pi">
@@ -35,59 +33,105 @@
           </div>
         </div>
       </aside>
-
       <!-- Top navigation -->
       <header class="topbar" role="navigation" aria-label="Top navigation">
         <nav class="topnav">
-          <!-- Logs goes to /logs (your redirect to today's stream) -->
-          <a href="/logs" class="nav-item {{ 'active' if mode != 'cfg' else '' }}">Logs</a>
-          <!-- Config goes to fixed /stream/cfg -->
-          <a href="/stream/cfg" class="nav-item {{ 'active' if mode == 'cfg' else '' }}">Config</a>
+          <a href="/logs" class="nav-item active">Logs</a>
+          <a href="/serial" class="nav-item active">Serial</a>
         </nav>
       </header>
-
       <main class="main-content" role="main">
-        <!-- Raw output (logs or JSON text) -->
-        <pre class="logbox term"
-             id="log"
-             aria-live="polite"
-             data-live="{{ 'true' if live else 'false' }}"
-             data-mode="{{ mode }}"
-             data-download="{{ download_url or '' }}">{{ initial }}</pre>
-
-        <!-- JSON tree viewer (only used when mode='cfg') -->
-        <div class="logbox term" id="jsonTree" style="display:none" aria-live="polite"></div>
-
+        <pre class="logbox term" id="log" aria-live="polite" data-live="{{ 'true' if live else 'false' }}" data-mode="logs" data-download="{{ download_url or '' }}">{{ initial }}</pre>
         <!-- Actions -->
         <div class="main-actions">
           {% if download_url %}
-            <a class="btn" href="{{ download_url }}">Download</a>
+          <a class="btn" href="{{ download_url }}">Download</a>
           {% endif %}
-
-          {% if mode == 'cfg' %}
-            <button class="btn secondary" id="toggleViewBtn" data-view="raw">Tree view</button>
-          {% endif %}
-
           {% if files %}
           <div class="dropup">
-            <button class="btn secondary" id="pickerBtn" aria-haspopup="menu" aria-expanded="false">Select</button>
+            <button class="btn secondary" id="pickerBtn" aria-haspopup="menu" aria-expanded="false">Browse</button>
             <div class="menu" id="pickerMenu" role="menu" aria-label="Choose item">
               {% set base = picker_base or '/stream/logs' %}
               {% for f in files %}
-                <a class="menu-item {{ 'active' if f == current_name else '' }}"
-                   href="{{ base }}/{{ f }}"
-                   role="menuitem">{{ f }}</a>
+              <a class="menu-item {{ 'active' if f == current_name else '' }}" href="{{ base }}/{{ f }}" role="menuitem">{{ f }}</a>
               {% endfor %}
             </div>
           </div>
           {% endif %}
         </div>
       </main>
-
       <!-- Bottom bar -->
       <footer class="bottombar" role="contentinfo" aria-label="Bottom bar">
         <div>Remolade Rune</div>
       </footer>
     </div>
+    <script>
+      (() => {
+        const out = document.getElementById('log');
+        if(!out) return;
+
+        // --- ADD: dropup controller ---
+        const pickerBtn  = document.getElementById('pickerBtn');
+        const pickerMenu = document.getElementById('pickerMenu');
+        if (pickerBtn && pickerMenu) {
+          let open = false;
+          const items = Array.from(pickerMenu.querySelectorAll('.menu-item'));
+
+          const setOpen = (v) => {
+            open = !!v;
+            pickerBtn.setAttribute('aria-expanded', String(open));
+            // Works regardless of your CSS; safe fallback
+            pickerMenu.style.display = open ? 'block' : 'none';
+          };
+          setOpen(false);
+
+          pickerBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            setOpen(!open);
+            if (open && items[0]) items[0].focus();
+          });
+
+          document.addEventListener('click', (e) => {
+            if (!open) return;
+            if (!pickerMenu.contains(e.target) && !pickerBtn.contains(e.target)) setOpen(false);
+          });
+
+          document.addEventListener('keydown', (e) => {
+            if (!open) return;
+            if (e.key === 'Escape') setOpen(false);
+          });
+
+          // Simple arrow-key navigation
+          pickerMenu.addEventListener('keydown', (e) => {
+            const i = items.indexOf(document.activeElement);
+            if (e.key === 'ArrowDown') { e.preventDefault(); (items[i+1] || items[0])?.focus(); }
+            if (e.key === 'ArrowUp')   { e.preventDefault(); (items[i-1] || items.at(-1))?.focus(); }
+          });
+        }
+
+        const MAX_CHARS = 200000;
+        const KEEP_CHARS = 150000;
+        const isLive = (out.dataset.live === 'true');
+
+        function append(line){
+          if (!line) return;
+          if (out.textContent && !out.textContent.endsWith('\n')) out.textContent += '\n';
+          out.textContent += line + '\n';
+          if (out.textContent.length > MAX_CHARS) {
+            out.textContent = out.textContent.slice(-KEEP_CHARS);
+          }
+          out.scrollTop = out.scrollHeight;
+        }
+
+        // Initial content already in <pre> from server
+        out.scrollTop = out.scrollHeight;
+
+        if (isLive) {
+          const socket = io();
+          socket.on('log_line', ({ line }) => append(line));
+          window.addEventListener('beforeunload', () => socket.off('log_line'));
+        }
+      })();
+    </script>
   </body>
 </html>

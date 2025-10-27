@@ -13,7 +13,6 @@
       <!-- Sidebar -->
       <aside class="sidebar" role="complementary" aria-label="Sidebar">
         <div class="sidebar-header">
-          <!-- Logo links to index -->
           <a class="logo-svg" aria-label="logo" href="{{ url_for('main.index') }}">
             <svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 495.9 107" aria-hidden="true" focusable="false">
               <style>.st0{fill:#01a3d6;}</style>
@@ -22,7 +21,6 @@
           </a>
         </div>
         <div class="device-info card">
-          <a>Menu</a>
         </div>
         <div class="sidebar-footer">
           <div class="bottom-logo" aria-label="Powered by Raspberry Pi">
@@ -38,20 +36,343 @@
       <!-- Top navigation -->
       <header class="topbar" role="navigation" aria-label="Top navigation">
         <nav class="topnav">
-          <!-- Logs goes to /logs (your redirect to today's stream) -->
-          <a href="/logs" class="nav-item {{ 'active' if mode != 'cfg' else '' }}">Logs</a>
-          <!-- Config goes to fixed /stream/cfg -->
-          <a href="/stream/cfg" class="nav-item {{ 'active' if mode == 'cfg' else '' }}">Config</a>
+          <a href="/logs" class="nav-item active">Logs</a>
+          <a href="/serial" class="nav-item active">Serial</a>
         </nav>
       </header>
       <!-- Main -->
       <main class="main-content" role="main">
-         <a>Index</a>
+        <div class="grid" id="gpioGrid" aria-live="polite"></div>
+        <!-- Add GPIO Modal -->
+        <div class="modal" id="addModal" aria-hidden="true" role="dialog" aria-modal="true">
+          <div class="modal-backdrop" data-close></div>
+          <div class="modal-dialog" role="document">
+            <div class="modal-head">
+              <h3 style="margin:0">Add GPIO</h3>
+              <button class="icon-btn" title="Close" data-close aria-label="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-row">
+                <div class="form-field" style="flex:1">
+                  <label for="addPin">GPIO Pin</label>
+                  <select id="addPin"></select>
+                </div>
+                <div class="form-field" style="width:160px">
+                  <label for="addMode">Mode</label>
+                  <select id="addMode">
+                    <option value="output">output</option>
+                    <option value="input">input</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-field" style="flex:1">
+                  <label for="addName">Name</label>
+                  <input id="addName" placeholder="My GPIO">
+                </div>
+                <div class="form-field" style="width:160px">
+                  <label for="addInitial">Initial value</label>
+                  <select id="addInitial">
+                    <option value="0">0 (LOW)</option>
+                    <option value="1">1 (HIGH)</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div class="modal-actions">
+              <button class="btn secondary" data-close>Cancel</button>
+              <button class="btn" id="addSubmit">Add</button>
+            </div>
+          </div>
+        </div>
       </main>
-     <!-- Bottom bar -->
-     <footer class="bottombar" role="contentinfo" aria-label="Bottom bar">
+      <!-- Bottom bar -->
+      <footer class="bottombar" role="contentinfo" aria-label="Bottom bar">
         <div>Remolade Rune</div>
-     </footer>
+      </footer>
     </div>
+    <script>
+      (() => {
+        const grid = document.getElementById('gpioGrid');
+
+        /* ---------- GPIO catalog ---------- */
+        const GPIO_CATALOG = [
+          { pin: 2,  caps: ['input','output'] }, { pin: 3,  caps: ['input','output'] },
+          { pin: 4,  caps: ['input','output'] }, { pin: 5,  caps: ['input','output'] },
+          { pin: 6,  caps: ['input','output'] }, { pin: 7,  caps: ['input','output'] },
+          { pin: 8,  caps: ['input','output'] }, { pin: 9,  caps: ['input','output'] },
+          { pin: 10, caps: ['input','output'] }, { pin: 11, caps: ['input','output'] },
+          { pin: 12, caps: ['input','output'] }, { pin: 13, caps: ['input','output'] },
+          { pin: 14, caps: ['input','output'] }, { pin: 15, caps: ['input','output'] },
+          { pin: 16, caps: ['input','output'] }, { pin: 17, caps: ['input','output'] },
+          { pin: 18, caps: ['input','output'] }, { pin: 19, caps: ['input','output'] },
+          { pin: 20, caps: ['input','output'] }, { pin: 21, caps: ['input','output'] },
+          { pin: 22, caps: ['input','output'] }, { pin: 23, caps: ['input','output'] },
+          { pin: 24, caps: ['input','output'] }, { pin: 25, caps: ['input','output'] },
+          { pin: 26, caps: ['input','output'] }, { pin: 27, caps: ['input','output'] },
+        ];
+
+        /* ---------- State ---------- */
+        const stateByPin = new Map();
+        let renamingPin = null;           // <- prevents caret jump while editing name
+
+        /* ---------- Icons ---------- */
+        const trashSVG  = `<svg viewBox="0 0 448 512" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M32 464a48 48 0 0 0 48 48h288a48 48 0 0 0 48-48V128H32zm272-256a16 16 0 0 1 32 0v224a16 16 0 0 1-32 0zm-96 0a16 16 0 0 1 32 0v224a16 16 0 0 1-32 0zm-96 0a16 16 0 0 1 32 0v224a16 16 0 0 1-32 0zM432 32H312l-9.4-18.7A24 24 0 0 0 281.1 0H166.8a23.72 23.72 0 0 0-21.4 13.3L136 32H16A16 16 0 0 0 0 48v32a16 16 0 0 0 16 16h416a16 16 0 0 0 16-16V48a16 16 0 0 0-16-16z"/></svg>`;
+        const pencilSVG = `<svg viewBox="0 0 512 512" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M497.9 142.1l-46.1 46.1c-4.7 4.7-12.3 4.7-17 0l-111-111c-4.7-4.7-4.7-12.3 0-17l46.1-46.1c18.7-18.7 49.1-18.7 67.9 0l60.1 60.1c18.8 18.7 18.8 49.1 0 67.9zM284.2 99.8L21.6 362.4.4 483.9c-2.9 16.4 11.4 30.6 27.8 27.8l121.5-21.3 262.6-262.6c4.7-4.7 4.7-12.3 0-17l-111-111c-4.8-4.7-12.4-4.7-17.1 0zM124.1 339.9c-5.5-5.5-5.5-14.3 0-19.8l154-154c5.5-5.5 14.3-5.5 19.8 0s5.5 14.3 0 19.8l-154 154c-5.5 5.5-14.3 5.5-19.8 0zM88 424h48v36.3l-64.5 11.3-31.1-31.1L51.7 376H88v48z"/></svg>`;
+
+        /* ---------- Small helpers ---------- */
+        const levelText = v => (v ? 'HIGH' : 'LOW');
+
+        const switchHTML = (enabled, disabled) => `
+          <label class="switch">
+            <input type="checkbox" ${enabled ? 'checked' : ''} ${disabled ? 'disabled' : ''}>
+            <span class="slider"></span>
+          </label>`;
+
+        // Middle box: always present, blank, and disabled
+        const valueBoxHTML = (item) => {
+          return `<input class="read-field" disabled value="" placeholder="">`;
+        };
+
+        // Bottom-left control: toggle for outputs, a read-only badge for inputs
+        const controlHTML = (item) => {
+          if (item.mode === 'input') {
+            return `<div class="state-pill ${item.value ? 'high':'low'}" data-state>${levelText(!!item.value)}</div>`;
+          }
+          return switchHTML(!!item.value, false);
+        };
+
+        const nameRowHTML = (item) => `
+          <div class="title">
+            <span class="name" data-name>${item.name || ('Pin ' + item.pin)}</span>
+            <button class="icon-btn chip rename" title="Rename">${pencilSVG}</button>
+          </div>`;
+
+        const cardHTML = (item) => `
+          <div class="card gpio-card" data-pin="${item.pin}" data-mode="${item.mode}">
+            <button class="icon-btn delete" title="Remove">${trashSVG}</button>
+            <div class="gpio-head">
+              ${nameRowHTML(item)}
+            </div>
+            <div class="fieldrow">
+              ${valueBoxHTML(item)}
+            </div>
+            ${controlHTML(item)}
+            <div class="meta">GPIO${item.pin}</div>
+          </div>`;
+
+        const addCardHTML = `
+          <button class="card add-card" id="addPinCard" title="Add GPIO" aria-label="Add GPIO">
+            <div class="big-plus">+</div>
+          </button>`;
+
+        function renderAll(list){
+          stateByPin.clear();
+          list.forEach(it => stateByPin.set(it.pin, it));
+          grid.innerHTML = list.map(cardHTML).join('') + addCardHTML;
+        }
+
+        function upsert(item){
+          stateByPin.set(item.pin, item);
+          const existing = grid.querySelector('.gpio-card[data-pin="' + item.pin + '"]');
+          if(existing){ existing.outerHTML = cardHTML(item); }
+          else{
+            const addCard = document.getElementById('addPinCard');
+            (addCard || grid).insertAdjacentHTML(addCard ? 'beforebegin' : 'beforeend', cardHTML(item));
+          }
+        }
+
+        function removeCard(pin){
+          stateByPin.delete(pin);
+          const el = grid.querySelector(`.gpio-card[data-pin="${pin}"]`);
+          if(el) el.remove();
+        }
+
+        /* ---------- Modal wiring ---------- */
+        const modal = document.getElementById('addModal');
+        const pinSel = document.getElementById('addPin');
+        const modeSel = document.getElementById('addMode');
+        const nameInp = document.getElementById('addName');
+        const initSel = document.getElementById('addInitial');
+
+        function openModal(){
+          const used = new Set([...stateByPin.keys()]);
+          pinSel.innerHTML = GPIO_CATALOG
+            .slice()
+            .sort((a,b)=>(used.has(a.pin)-used.has(b.pin))||(a.pin-b.pin))
+            .map(p=>`<option value="${p.pin}" ${used.has(p.pin)?'disabled':''}>${p.pin}${used.has(p.pin)?' (in use)':''}</option>`)
+            .join('');
+          onPinChange();
+          nameInp.value = '';
+          initSel.value = '0';
+          modal.classList.add('open');
+          modal.setAttribute('aria-hidden','false');
+          nameInp.focus();
+        }
+        function closeModal(){ modal.classList.remove('open'); modal.setAttribute('aria-hidden','true'); }
+        function onPinChange(){
+          const pin = parseInt(pinSel.value,10);
+          const cat = GPIO_CATALOG.find(p=>p.pin===pin);
+          const caps = (cat && cat.caps) || ['input','output'];
+          modeSel.innerHTML = caps.map(m=>`<option value="${m}">${m}</option>`).join('');
+        }
+        pinSel.addEventListener('change', onPinChange);
+        modal.addEventListener('click', (e)=>{ if(e.target.matches('[data-close], .modal-backdrop')) closeModal(); });
+        document.getElementById('addSubmit').addEventListener('click', async ()=>{
+          const body = {
+            pin: parseInt(pinSel.value,10),
+            name: nameInp.value.trim() || `Pin ${pinSel.value}`,
+            mode: modeSel.value === 'input' ? 'input' : 'output',
+            value: parseInt(initSel.value,10) || 0
+          };
+          const r = await fetch('/api/gpio', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          const data = await r.json();
+          if(r.ok){ upsert(data); closeModal(); } else alert(data.error || 'Add failed');
+        });
+
+        /* ---------- Delegated card actions ---------- */
+        grid.addEventListener('click', async (e)=>{
+          if(e.target.closest('#addPinCard')){ openModal(); return; }
+
+          const card = e.target.closest('.gpio-card');
+          if(!card) return;
+          const pin = parseInt(card.dataset.pin,10);
+
+          // delete
+          if(e.target.closest('.delete')){
+            if(!confirm(`Remove pin ${pin}?`)) return;
+            const r = await fetch(`/api/gpio/${pin}`, { method:'DELETE' });
+            const data = await r.json();
+            if(r.ok) removeCard(pin); else alert(data.error || 'Remove failed');
+            return;
+          }
+
+          // toggle (outputs only) — FIX: send the inverted value & optimistic UI
+          const sw = e.target.closest('.switch');
+          if(sw){
+            e.preventDefault();
+            const input = sw.querySelector('input');
+            if(input.disabled) return;
+            const next = input.checked ? 0 : 1; // invert
+            input.checked = !!next;             // optimistic
+            input.disabled = true;
+            try{
+              const r = await fetch(`/api/gpio/${pin}`, {
+                method:'PATCH', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({value: next})
+              });
+              const data = await r.json();
+              if(r.ok) upsert(data);
+              else { input.checked = !next; alert(data.error || 'Toggle failed'); }
+            } finally { input.disabled = false; }
+            return;
+          }
+
+          // inline rename with caret-safe polling pause
+          if(e.target.closest('.rename')){
+            const nameEl = card.querySelector('[data-name]');
+            const prev = nameEl.textContent.trim();
+            renamingPin = pin;
+            nameEl.contentEditable = 'true';
+            nameEl.classList.add('name-editing');
+            const range = document.createRange(); range.selectNodeContents(nameEl); range.collapse(false);
+            const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+            nameEl.focus();
+
+            const cancel = () => { nameEl.textContent = prev; done(); };
+            const save = async () => {
+              const next = nameEl.textContent.trim() || prev;
+              if(next === prev){ done(); return; }
+              const r = await fetch(`/api/gpio/${pin}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: next})});
+              const data = await r.json();
+              if(r.ok){ nameEl.textContent = data.name; } else { nameEl.textContent = prev; alert(data.error || 'Rename failed'); }
+              done();
+            };
+            const key = (ev)=>{ if(ev.key==='Enter'){ ev.preventDefault(); save(); } else if(ev.key==='Escape'){ ev.preventDefault(); cancel(); } };
+            const blur = ()=> save();
+
+            function done(){
+              renamingPin = null;
+              nameEl.classList.remove('name-editing');
+              nameEl.removeEventListener('keydown', key);
+              nameEl.removeEventListener('blur', blur);
+              nameEl.contentEditable = 'false';
+            }
+            nameEl.addEventListener('keydown', key);
+            nameEl.addEventListener('blur', blur);
+            return;
+          }
+        });
+
+        /* ---------- Initial load + input polling ---------- */
+        async function loadAll(){ const r = await fetch('/api/gpio'); const list = await r.json(); renderAll(list); }
+        loadAll();
+
+        setInterval(async ()=>{
+          const r = await fetch('/api/gpio'); const list = await r.json();
+          for(const item of list){
+            const card = grid.querySelector(`.gpio-card[data-pin="${item.pin}"]`);
+            if(!card) continue;
+
+            // If mode changes, re-render the whole card to switch control types
+            if(card.dataset.mode !== item.mode){ upsert(item); continue; }
+
+            // Update middle field (keep it blank + disabled always)
+            const field = card.querySelector('.read-field');
+            if (field) { field.disabled = true; field.value = ''; }
+
+            // Update bottom-left control
+            if(item.mode === 'input'){
+              const pill = card.querySelector('[data-state]');
+              if(pill){
+                pill.textContent = levelText(!!item.value);
+                pill.classList.toggle('high', !!item.value);
+                pill.classList.toggle('low', !item.value);
+              }
+            }else{
+              const s = card.querySelector('.switch input');
+              if(s){ s.checked = !!item.value; s.disabled = false; }
+            }
+
+            // Update meta
+            const meta = card.querySelector('.meta');
+            if(meta) meta.textContent = `GPIO${item.pin}`;
+
+            // Update name (but NOT while renaming)
+            const nameEl = card.querySelector('[data-name]');
+            if(nameEl && item.pin !== renamingPin){
+              nameEl.textContent = item.name || ('Pin ' + item.pin);
+            }
+          }
+        }, 2000);
+
+        /* ---------- Live updates via Socket.IO (optional) ---------- */
+        try{
+          const sio = io();
+          sio.on('gpio_update', ({pin, value}) => {
+            const c = grid.querySelector(`.gpio-card[data-pin="${pin}"]`);
+            if(!c) return;
+            if(c.dataset.mode === 'input'){
+              const pill = c.querySelector('[data-state]');
+              if(pill){
+                pill.textContent = levelText(!!value);
+                pill.classList.toggle('high', !!value);
+                pill.classList.toggle('low', !value);
+              }
+            } else {
+              const sw = c.querySelector('.switch input');
+              if(sw) sw.checked = !!value;
+            }
+          });
+          sio.on('gpio_added', upsert);
+          sio.on('gpio_removed', ({pin}) => removeCard(pin));
+          sio.on('gpio_renamed', ({pin, name}) => {
+            if(pin === renamingPin) return;
+            const c = grid.querySelector(`.gpio-card[data-pin="${pin}"]`);
+            if(c) c.querySelector('[data-name]').textContent = name;
+          });
+        }catch(_){}
+      })();
+    </script>
   </body>
 </html>
