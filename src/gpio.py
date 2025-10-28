@@ -1,8 +1,8 @@
 from __future__ import annotations
-import eventlet
 from typing import Any, Dict, List
 from .config import initialize_config, load_cfg, save_cfg
 import logging
+import threading
 
 # --- GPIO (real or mock)
 try:
@@ -33,7 +33,7 @@ class GpioManager:
     """Single source of truth for GPIO state and config persistence."""
     def __init__(self, socketio):
         self.socketio = socketio
-        eventlet.semaphore.Semaphore(1)
+        self.lock = threading.RLock()
         self.log = logging.getLogger(__name__)
         initialize_config()
         self.cfg = load_cfg()
@@ -79,7 +79,8 @@ class GpioManager:
     # ---- public API
     def state(self) -> List[Dict[str,Any]]:
         out = []
-        for it in self.cfg.get("gpio", []):
+        items = self.cfg.get("gpio", [])
+        for it in items:
             pin  = int(it["pin"])
             mode = _coerce_mode(it.get("mode"))
             val  = int(it.get("value", 0))

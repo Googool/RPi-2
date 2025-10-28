@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
   </head>
   <body>
@@ -88,11 +88,13 @@
       </main>
       <!-- Bottom bar -->
       <footer class="bottombar" role="contentinfo" aria-label="Bottom bar">
-        <div>Remolade Rune</div>
+        <div>Prototype: Remolade Rune v0.1</div>
       </footer>
     </div>
     <script>
       (() => {
+        if (!window.io) return;
+        const sio = io({ transports: ['polling'], upgrade: false, path: '/socket.io' });
         const grid = document.getElementById('gpioGrid');
 
         /* ---------- GPIO catalog ---------- */

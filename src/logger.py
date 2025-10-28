@@ -2,6 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime, timedelta, time as dtime
 import logging
+import threading, time
 
 LOGS_DIR = Path(__file__).resolve().parents[1] / "data" / "logs"
 
@@ -67,14 +68,15 @@ class SocketIOHandler(logging.Handler):
             pass
 
 def schedule_midnight_rotation() -> None:
-    import eventlet
     def _loop():
         while True:
             now = datetime.now()
             target = datetime.combine((now + timedelta(days=1)).date(), dtime.min)
-            eventlet.sleep(max(1.0, (target - now).total_seconds() + 1))
+            delay = max(1.0, (target - now).total_seconds() + 1)
+            time.sleep(delay)
             bind_logger_to_today()
-    eventlet.spawn_n(_loop)
+    t = threading.Thread(target=_loop, daemon=True)
+    t.start()
 
 def init_logging(socketio) -> None:
     bind_logger_to_today()

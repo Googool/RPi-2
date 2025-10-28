@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Stream</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
     <script src="{{ url_for('static', filename='main.js') }}" defer></script>
   </head>
   <body>
@@ -62,15 +62,15 @@
       </main>
       <!-- Bottom bar -->
       <footer class="bottombar" role="contentinfo" aria-label="Bottom bar">
-        <div>Remolade Rune</div>
+        <div>Prototype: Remolade Rune v0.1</div>
       </footer>
     </div>
     <script>
       (() => {
         const out = document.getElementById('log');
-        if(!out) return;
+        if (!out) return;
 
-        // --- ADD: dropup controller ---
+        // --- Dropup controller (unchanged) ---
         const pickerBtn  = document.getElementById('pickerBtn');
         const pickerMenu = document.getElementById('pickerMenu');
         if (pickerBtn && pickerMenu) {
@@ -80,7 +80,6 @@
           const setOpen = (v) => {
             open = !!v;
             pickerBtn.setAttribute('aria-expanded', String(open));
-            // Works regardless of your CSS; safe fallback
             pickerMenu.style.display = open ? 'block' : 'none';
           };
           setOpen(false);
@@ -109,29 +108,80 @@
           });
         }
 
-        const MAX_CHARS = 200000;
+        // --- Log stream + anti-scroll ---
+        const MAX_CHARS  = 200000;
         const KEEP_CHARS = 150000;
-        const isLive = (out.dataset.live === 'true');
 
+        const nearBottom = () =>
+          (out.scrollHeight - out.clientHeight - out.scrollTop) <= 20;
+
+        let pinned = true; // start pinned
+        out.addEventListener('scroll', () => { pinned = nearBottom(); });
+
+        // Single, unified append (fixes the duplicate function issue)
         function append(line){
           if (!line) return;
+
+          const prevTop   = out.scrollTop;
+          const wasPinned = pinned;
+
           if (out.textContent && !out.textContent.endsWith('\n')) out.textContent += '\n';
           out.textContent += line + '\n';
+
+          // Trim if too big; try to keep viewport stable if user scrolled up
+          let trimmed = false;
+          let removedPx = 0;
+
           if (out.textContent.length > MAX_CHARS) {
-            out.textContent = out.textContent.slice(-KEEP_CHARS);
+            const beforeTrimHeight = out.scrollHeight;
+
+            const startIdx = Math.max(0, out.textContent.length - KEEP_CHARS);
+            const nl = out.textContent.indexOf('\n', startIdx);
+            const cutAt = (nl > -1) ? (nl + 1) : startIdx;
+            out.textContent = out.textContent.slice(cutAt);
+
+            trimmed = true;
+            const afterTrimHeight = out.scrollHeight;
+            removedPx = Math.max(0, beforeTrimHeight - afterTrimHeight);
           }
-          out.scrollTop = out.scrollHeight;
+
+          if (wasPinned) {
+            out.scrollTop = out.scrollHeight;        // follow the log
+          } else if (trimmed) {
+            out.scrollTop = Math.max(0, prevTop - removedPx); // maintain view after trim
+          }
+          // else: let browser keep position
         }
 
-        // Initial content already in <pre> from server
+        // Start pinned to bottom on load
         out.scrollTop = out.scrollHeight;
+        pinned = true;
 
-        if (isLive) {
-          const socket = io();
-          socket.on('log_line', ({ line }) => append(line));
-          window.addEventListener('beforeunload', () => socket.off('log_line'));
+        // --- Socket.IO ---
+          ensureIO().then(() => {
+            if (!window.io) {
+              append('[socket.io client not available — live stream disabled]');
+              return;
+            }
+
+            // Force long-polling (Werkzeug/threading won’t do WebSocket)
+            const socket = io({ transports: ['polling'], upgrade: false, path: '/socket.io' });
+
+            // Small diagnostics in the log box
+            socket.on('connect',       () => append('[socket connected]'));
+            socket.on('disconnect',    (r) => append('[socket disconnected] ' + r));
+            socket.on('reconnect',     (n) => append('[socket reconnected #' + n + ']'));
+            socket.on('connect_error', (e) => append('[socket error] ' + (e && e.message ? e.message : e)));
+
+            socket.on('log_line', ({ line }) => append(line));
+
+            window.addEventListener('beforeunload', () => {
+              socket.removeAllListeners();
+              socket.close();
+            });
+          });
         }
-      })();
+      )();
     </script>
   </body>
 </html>
