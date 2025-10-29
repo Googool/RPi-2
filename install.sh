@@ -86,8 +86,8 @@ fi
 
 # --------- 5) install systemd units ----------
 echo "[5/6] install systemd services..."
-RPI_UNIT_SRC="$APP_DIR/rpi-gpio@.service"
-OLED_UNIT_SRC="$APP_DIR/oled-status@.service"
+RPI_UNIT_SRC="$APP_DIR/systemd/rpi-gpio@.service"
+OLED_UNIT_SRC="$APP_DIR/systemd/oled-status@.service"
 
 if [[ ! -f "$RPI_UNIT_SRC" ]]; then
   echo "ERROR: $RPI_UNIT_SRC not found. Commit rpi-gpio@.service to the repo."; exit 2; fi
