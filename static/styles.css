@@ -64,6 +64,8 @@ svg{ display:block }
   flex:0 0 auto;
 }
 .logo-svg{ width:var(--logo-w); max-width:100%; margin-inline:auto }
+.logo-img { display:block; width:100%; height:auto; }
+.bottom-logo img { height:100%; width:auto; display:block; }
 
 .device-info{ flex:1 1 auto; overflow:auto; margin:12px; min-height:0 }
 
@@ -79,7 +81,8 @@ svg{ display:block }
   display:flex; align-items:center; justify-content:center;
   color: var(--text); line-height:0;
 }
-.bottom-logo svg{ height:100%; width:auto }
+
+.bottom-logo img { filter: invert(1) brightness(100); }
 
 /* Top / Bottom bars */
 .topbar{

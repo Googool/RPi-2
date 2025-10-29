@@ -18,7 +18,6 @@ authors = [
 dependencies = [
     "Flask>=3.0",
     "flask-socketio>=5.4",
-    "eventlet>=0.37",
 ]
 
 [project.optional-dependencies]
@@ -26,6 +25,12 @@ dev = [
     "pytest>=7.0",
     "pytest-flask>=1.3",
     "requests",
+]
+rpi = [
+    "RPi.GPIO",
+    "adafruit-blinka",
+    "adafruit-circuitpython-ssd1305",
+    "pillow",
 ]
 
 [project.urls]

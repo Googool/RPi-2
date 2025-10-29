@@ -80,9 +80,11 @@ def schedule_midnight_rotation() -> None:
 
 def init_logging(socketio) -> None:
     bind_logger_to_today()
-    sio_handler = SocketIOHandler(socketio)
-    sio_handler.setLevel(logging.INFO)
-    sio_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
-    logging.getLogger().addHandler(sio_handler)
+    root = logging.getLogger()
+    if not any(isinstance(h, SocketIOHandler) for h in root.handlers):
+        sio_handler = SocketIOHandler(socketio)
+        sio_handler.setLevel(logging.INFO)
+        sio_handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(name)s: %(message)s'))
+        root.addHandler(sio_handler)
     schedule_midnight_rotation()
     logging.getLogger(__name__).info("Live logging ready")

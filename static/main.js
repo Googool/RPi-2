@@ -1,106 +1,116 @@
-document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-confirm]');
+// ------------------ shared tiny helpers ------------------
+function humanMB(n) { return `${Math.round(n / (1024*1024))}MB`; }
+function humanGB(n) { return `${Math.round(n / (1024*1024*1024))}GB`; }
+function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+const hasNum = (v) => typeof v === "number" && Number.isFinite(v);
+const hasObj = (v) => v && typeof v === "object";
+
+// ------------------ click-to-confirm + Esc closes modals ------------------
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-confirm]");
   if (!t) return;
-  const msg = t.getAttribute('data-confirm') || 'Are you sure?';
+  const msg = t.getAttribute("data-confirm") || "Are you sure?";
   if (!confirm(msg)) e.preventDefault();
 });
 
-document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  document.querySelectorAll('.modal.open').forEach(modal => {
-    const closer = modal.querySelector('[data-close]') || modal.querySelector('.modal-backdrop');
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  document.querySelectorAll(".modal.open").forEach((modal) => {
+    const closer = modal.querySelector("[data-close]") || modal.querySelector(".modal-backdrop");
     if (closer) closer.click();
   });
 });
 
-/* ---------- System monitor (in sidebar device-info card) ---------- */
-{
-  const deviceCard = document.querySelector('.device-info.card');
-  if (!deviceCard) {
-    // This page doesn't have the device-info card; do nothing.
-  } else if (deviceCard.querySelector('.sysmon')) {
-    // Already mounted on this page; don't mount twice.
-  } else {
-    const sysRoot = document.createElement('div');
-    sysRoot.className = 'sysmon';
-    sysRoot.innerHTML = `
-      <h4 class="sysmon-title">System</h4>
-      <div class="meters">
-        <div class="meter">
-          <div class="meter-label">CPU</div>
-          <div class="progress"><div class="fill" id="cpuFill" style="width:0%"></div></div>
-          <div class="meter-text" id="cpuTxt">--%</div>
-        </div>
-        <div class="meter">
-          <div class="meter-label">RAM</div>
-          <div class="progress"><div class="fill" id="ramFill" style="width:0%"></div></div>
-          <div class="meter-text" id="ramTxt">--/--</div>
-        </div>
-        <div class="meter">
-          <div class="meter-label">Disk</div>
-          <div class="progress"><div class="fill" id="diskFill" style="width:0%"></div></div>
-          <div class="meter-text" id="diskTxt">--/--</div>
-        </div>
-        <div class="meter temp">
-          <div class="meter-label">Temp</div>
-          <div class="meter-text" id="tempTxt">-- °C</div>
-        </div>
-      </div>`;
-    deviceCard.appendChild(sysRoot);
+// ------------------ System monitor (poll-only; no sockets) ------------------
+(function systemCardMount() {
+  const card = document.querySelector("[data-sys-card]");
+  if (!card || card.dataset.mounted === "1") return;
+  card.dataset.mounted = "1";
 
-    // element refs (scoped to sysRoot so we don't leak globals)
-    const cpuFill = sysRoot.querySelector('#cpuFill');
-    const ramFill = sysRoot.querySelector('#ramFill');
-    const diskFill = sysRoot.querySelector('#diskFill');
-    const cpuTxt  = sysRoot.querySelector('#cpuTxt');
-    const ramTxt  = sysRoot.querySelector('#ramTxt');
-    const diskTxt = sysRoot.querySelector('#diskTxt');
-    const tempTxt = sysRoot.querySelector('#tempTxt');
+  // Build skeleton once
+  card.innerHTML = `
+    <h3 class="sysmon-title">System</h3>
+    <div class="meters">
+      <div class="meter" data-meter="cpu">
+        <div class="meter-label">CPU</div>
+        <div class="progress"><div class="fill" style="width:0%"></div></div>
+        <div class="meter-text" data-cpu>—</div>
+      </div>
+      <div class="meter" data-meter="ram">
+        <div class="meter-label">RAM</div>
+        <div class="progress"><div class="fill" style="width:0%"></div></div>
+        <div class="meter-text" data-ram>—</div>
+      </div>
+      <div class="meter" data-meter="disk">
+        <div class="meter-label">Disk</div>
+        <div class="progress"><div class="fill" style="width:0%"></div></div>
+        <div class="meter-text" data-disk>—</div>
+      </div>
+    </div>
+  `;
 
-    const MB = 1024 * 1024;
-    const fmtMB = n => `${Math.round(n / MB)}MB`;
+  const el = {
+    cpuText:  card.querySelector("[data-cpu]"),
+    ramText:  card.querySelector("[data-ram]"),
+    diskText: card.querySelector("[data-disk]"),
+    cpuFill:  card.querySelector('[data-meter="cpu"] .fill'),
+    ramFill:  card.querySelector('[data-meter="ram"] .fill'),
+    diskFill: card.querySelector('[data-meter="disk"] .fill'),
+    ramRow:   card.querySelector('[data-meter="ram"]'),
+    diskRow:  card.querySelector('[data-meter="disk"]'),
+  };
 
-    function renderSys(mon){
-      const cpu = Math.max(0, Math.min(100, mon.cpu || 0));
-      const rUsed = mon.ram?.used || 0, rTot = mon.ram?.total || 1;
-      const dUsed = mon.disk?.used || 0, dTot = mon.disk?.total || 1;
-      const rPct = Math.round((rUsed/rTot)*100);
-      const dPct = Math.round((dUsed/dTot)*100);
+  function render(mon) {
+    const hasAny = (mon && (
+      hasNum(mon.cpu) ||
+      (hasObj(mon.ram)  && hasNum(mon.ram.total)) ||
+      (hasObj(mon.disk) && hasNum(mon.disk.total))
+    ));
+    card.style.display = hasAny ? "" : "none";
+    if (!hasAny) return;
 
-      cpuFill.style.width = cpu + '%';
-      cpuTxt.textContent = cpu.toFixed(0) + '%';
-
-      ramFill.style.width = rPct + '%';
-      ramTxt.textContent = `${fmtMB(rUsed)}/${fmtMB(rTot)}`;
-
-      diskFill.style.width = dPct + '%';
-      diskTxt.textContent = `${fmtMB(dUsed)}/${fmtMB(dTot)}`;
-
-      tempTxt.textContent = (mon.temp_c != null) ? `${mon.temp_c.toFixed(1)} °C` : '-- °C';
+    // CPU
+    if (hasNum(mon.cpu)) {
+      const p = clamp01(mon.cpu / 100);
+      el.cpuFill.style.width = `${Math.round(p * 100)}%`;
+      el.cpuText.textContent = `${Math.round(mon.cpu)}%`;
+    } else {
+      el.cpuFill.style.width = "0%";
+      el.cpuText.textContent = "—";
     }
 
-    // Dev-PC fallback (mock values)
-    let mock = { cpu: 12, ram: {used: 220*MB, total: 512*MB}, disk: {used: 3.2*1024*MB, total: 8*1024*MB}, temp_c: 41.3 };
-    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
-    function jiggleMock(){
-      mock.cpu = clamp(mock.cpu + (Math.random()*10-5), 2, 95);
-      mock.ram.used = clamp(mock.ram.used + (Math.random()*15-7)*MB, 150*MB, mock.ram.total*0.95);
-      mock.disk.used = clamp(mock.disk.used + (Math.random()*30-15)*MB, 0.1*mock.disk.total, 0.95*mock.disk.total);
-      mock.temp_c = clamp(mock.temp_c + (Math.random()*1.6-0.8), 35, 75);
-      return {...mock, ram:{...mock.ram}, disk:{...mock.disk}};
+    // RAM
+    if (hasObj(mon.ram) && hasNum(mon.ram.total) && hasNum(mon.ram.used)) {
+      const p = clamp01(mon.ram.used / mon.ram.total);
+      el.ramFill.style.width = `${Math.round(p * 100)}%`;
+      el.ramText.textContent = `${humanMB(mon.ram.used)}/${humanMB(mon.ram.total)}`;
+      el.ramRow.style.display = "";
+    } else {
+      el.ramRow.style.display = "none";
     }
 
-    async function pollSys(){
-      try{
-        const r = await fetch('/api/sys');
-        if(!r.ok) throw new Error(String(r.status));
-        const data = await r.json();
-        renderSys(data);
-      }catch{
-        renderSys(jiggleMock()); // dev PC fallback
-      }
+    // Disk
+    if (hasObj(mon.disk) && hasNum(mon.disk.total) && hasNum(mon.disk.used)) {
+      const p = clamp01(mon.disk.used / mon.disk.total);
+      el.diskFill.style.width = `${Math.round(p * 100)}%`;
+      el.diskText.textContent = `${humanGB(mon.disk.used)}/${humanGB(mon.disk.total)}`;
+      el.diskRow.style.display = "";
+    } else {
+      el.diskRow.style.display = "none";
     }
-    pollSys();
-    setInterval(pollSys, 3000);
   }
-}
+
+  async function pollOnce() {
+    try {
+      const r = await fetch("/api/sys", { cache: "no-store" });
+      if (!r.ok) { card.style.display = "none"; return; }
+      render(await r.json());
+    } catch {
+      card.style.display = "none";
+    }
+  }
+
+  pollOnce();
+  const t = setInterval(pollOnce, 5000);
+  window.addEventListener("beforeunload", () => clearInterval(t));
+})();

@@ -10,7 +10,7 @@ CONFIG_PATH = Path(__file__).resolve().parents[1] / "data" / "cfg.json"
 DEFAULT_CFG = {
     "network": {"interface": "wlan0", "mode": "dhcp", "address": None, "gateway": None},
     "gpio": [
-        {"pin": 15, "name": "Power", "mode": "output", "value": 0}
+        {"pin": 22, "name": "Power", "mode": "output", "value": 0}
     ],
 }
 

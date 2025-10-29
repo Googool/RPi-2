@@ -1,0 +1,22 @@
+[Unit]
+Description=RPi GPIO Web Interface (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+# Defaults match APP_DIR=$HOME/app; if you change APP_DIR, re-run install.sh
+WorkingDirectory=%h/app
+Environment=LC_ALL=C.UTF-8
+Environment=LANG=C.UTF-8
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/usr/bin/env bash -lc 'mkdir -p "%h/app/data/logs"'
+ExecStart=%h/app/.venv/bin/python -m src
+Restart=on-failure
+RestartSec=3
+# Access to GPIO and I²C devices
+SupplementaryGroups=gpio i2c
+
+[Install]
+WantedBy=multi-user.target

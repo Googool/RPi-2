@@ -1,0 +1,17 @@
+[Unit]
+Description=OLED hostname/IP display (SSD1305) for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=%h/app
+ExecStart=%h/app/.venv/bin/python %h/app/scripts/oled_status.py
+Restart=always
+RestartSec=3
+# Access to I²C
+SupplementaryGroups=i2c
+
+[Install]
+WantedBy=multi-user.target

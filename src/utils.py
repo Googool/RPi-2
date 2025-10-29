@@ -2,6 +2,7 @@ from __future__ import annotations
 import os, re
 from datetime import datetime
 from pathlib import Path
+import threading, time
 
 # Project paths
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,3 +79,12 @@ def _secure_log_from_compact_or_404(compact: str) -> Path:
     if not path.exists() or not path.is_file():
         abort(404)
     return path
+
+def _read_cpu():
+    # Return (idle, total) jiffies from /proc/stat
+    with open("/proc/stat") as f:
+        parts = f.readline().split()[1:]
+        vals = list(map(int, parts[:7]))
+        idle = vals[3] + vals[4]
+        total = sum(vals)
+        return idle, total

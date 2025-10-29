@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import shutil, time
 from flask import Blueprint, render_template, redirect, send_file, url_for, jsonify, request
 from pathlib import Path
 from .gpio import GpioManager
@@ -10,6 +9,7 @@ from .utils import (
     log_path_for_date,
     list_log_compacts,
     _secure_log_from_compact_or_404,
+    _read_cpu
 )
 
 def create_app(app, socketio):
@@ -106,60 +106,47 @@ def create_app(app, socketio):
             log.warning("api_gpio_delete ip=%s pin=%d ok=0 err=%s", _client_ip(), pin, e)
             return jsonify({"error": str(e)}), 404
 
-    # SYSTEM: summary
+    # ---------- SYSTEM: summary ----------
     @bp.get("/api/sys")
     def api_sys():
+        import shutil, time
+
         # RAM via /proc/meminfo
+        ram_total = ram_used = None
         try:
             mem = {}
             with open("/proc/meminfo") as f:
                 for line in f:
                     k, v = line.split(":", 1)
                     mem[k.strip()] = int(v.strip().split()[0]) * 1024  # kB -> B
-            ram_total = mem.get("MemTotal", 0)
-            ram_free = mem.get("MemAvailable", 0)
-            ram_used = max(0, ram_total - ram_free)
+            t = mem.get("MemTotal")
+            a = mem.get("MemAvailable")
+            if t is not None and a is not None:
+                ram_total = int(t)
+                ram_used = max(0, ram_total - int(a))
         except Exception:
-            ram_total = 512 * 1024 * 1024
-            ram_used = 220 * 1024 * 1024
+            pass
 
         # Disk via shutil
+        disk_total = disk_used = None
         try:
             du = shutil.disk_usage("/")
-            disk_total, disk_used = du.total, du.used
+            disk_total, disk_used = int(du.total), int(du.used)
         except Exception:
-            disk_total = 8 * 1024**3
-            disk_used  = 3.2 * 1024**3
+            pass
 
-        # CPU: simple 1-sec load snapshot -> % of 1 core (rough)
+        # CPU via /proc/stat (short delta)
+        cpu = None
         try:
-            # Prefer /proc/stat delta
-            def _read_cpu():
-                with open("/proc/stat") as f:
-                    parts = f.readline().split()[1:]
-                    vals = list(map(int, parts[:7]))
-                    idle = vals[3] + vals[4]
-                    total = sum(vals)
-                    return idle, total
-            i1,t1 = _read_cpu(); time.sleep(0.2); i2,t2 = _read_cpu()
+            i1, t1 = _read_cpu(); time.sleep(0.1); i2, t2 = _read_cpu()
             cpu = (1 - (i2 - i1) / max(1, (t2 - t1))) * 100.0
         except Exception:
-            cpu = 12.0
-
-        # Temp (Pi): /sys/class/thermal or vcgencmd
-        temp_c = None
-        try:
-            with open("/sys/class/thermal/thermal_zone0/temp") as f:
-                temp_c = int(f.read().strip()) / 1000.0
-        except Exception:
-            # dev pc mock
-            temp_c = 41.3
+            cpu = 0.0
 
         return jsonify({
-            "cpu": round(cpu, 1),
-            "ram": {"used": ram_used, "total": ram_total},
-            "disk": {"used": disk_used, "total": disk_total},
-            "temp_c": temp_c
+            "cpu": cpu,
+            "ram": {"used": ram_used, "total": ram_total} if ram_total is not None else None,
+            "disk": {"used": disk_used, "total": disk_total} if disk_total is not None else None,
         })
 
     # ---------- Socket.IO ----------
