@@ -2,24 +2,14 @@
 Description=OLED status display (%i)
 After=network-online.target
 Wants=network-online.target
-# Only start if I²C is actually present
-ConditionPathExists=/dev/i2c-1
 
 [Service]
 Type=simple
 User=%i
 WorkingDirectory=%h/app
-Environment=LC_ALL=C.UTF-8
-Environment=LANG=C.UTF-8
-Environment=PYTHONUNBUFFERED=1
-
-# Adjust module/args to match your script
-# (example assumes you have src/oled_status.py with a __main__)
 ExecStart=%h/app/.venv/bin/python -m src.oled_status --device i2c --addr 0x3C --refresh 5
-
-Restart=always
-RestartSec=5
-SupplementaryGroups=i2c
+Restart=on-failure
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target

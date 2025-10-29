@@ -94,9 +94,19 @@ if [[ ! -f "$RPI_UNIT_SRC" ]]; then
 if [[ ! -f "$OLED_UNIT_SRC" ]]; then
   echo "ERROR: $OLED_UNIT_SRC not found. Commit oled-status@.service to the repo."; exit 2; fi
 
-sudo install -m 0644 -D "$RPI_UNIT_SRC"  "/etc/systemd/system/rpi-gpio@.service"
-sudo install -m 0644 -D "$OLED_UNIT_SRC" "/etc/systemd/system/oled-status@.service"
+# Copy units from repo root into /etc/systemd/system
+sudo install -m 0644 -D "$APP_DIR/rpi-gpio@.service"   "/etc/systemd/system/rpi-gpio@.service"
+sudo install -m 0644 -D "$APP_DIR/oled-status@.service" "/etc/systemd/system/oled-status@.service" || true
 
+# Reload and (re)enable for the current user
+ME="$(id -un)"
+sudo systemctl daemon-reload
+sudo systemctl stop    "rpi-gpio@${ME}.service" 2>/dev/null || true
+sudo systemctl reset-failed "rpi-gpio@${ME}.service" || true
+sudo systemctl enable --now "rpi-gpio@${ME}.service"
+
+# Optional: OLED
+sudo systemctl enable --now "oled-status@${ME}.service"
 sudo systemctl daemon-reload
 
 echo "[6/6] enable/launch services for user '${PI_USER}'…"

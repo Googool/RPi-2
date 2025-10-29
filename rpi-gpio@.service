@@ -6,21 +6,22 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=%i
-# %h == /home/<user>
+# Use the service user's home, not /root
 WorkingDirectory=%h/app
+
+# Create the logs dir without using a shell or root-only chown
+ExecStartPre=/usr/bin/mkdir -p %h/app/data/logs
+
+# Start your app module
+ExecStart=%h/app/.venv/bin/python -m src
+
 Environment=LC_ALL=C.UTF-8
 Environment=LANG=C.UTF-8
 Environment=PYTHONUNBUFFERED=1
 
-# Make logs dir owned by the service user (no $HOME, no /root)
-ExecStartPre=/usr/bin/install -d -m 0755 -o %i -g %i %h/app/data/logs
-
-# Adjust module if your entrypoint differs
-ExecStart=%h/app/.venv/bin/python -m src
-
 Restart=on-failure
 RestartSec=3
-SupplementaryGroups=gpio i2c
+SupplementaryGroups=gpio
 
 [Install]
 WantedBy=multi-user.target
