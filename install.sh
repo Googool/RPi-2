@@ -1,39 +1,48 @@
 #!/usr/bin/env bash
+# Install (no systemd): clone/update repo, make venv, install deps, run web + OLED
+# Usage (SSH):
+#   curl -fsSL https://raw.githubusercontent.com/Googool/RPi-2/main/install.sh | bash
+#
+# Options (env):
+#   APP_DIR=~/app           # install path
+#   REPO_URL=...            # repo url
+#   BRANCH=main             # branch
+#   EXTRAS=                 # pip extras; auto "rpi" on Pi if empty
+#   RUNNER=tmux|nohup|fg    # how to run processes (default tmux)
+#   OLED_ADDR=0x3C          # I2C address
+#   OLED_REFRESH=5          # seconds
+#   OLED_DEVICE=i2c         # i2c or spi
+
 set -euo pipefail
 
-# --------- config (overridable via env) ----------
 APP_DIR="${APP_DIR:-$HOME/app}"
 REPO_URL="${REPO_URL:-https://github.com/Googool/RPi-2}"
 BRANCH="${BRANCH:-main}"
-SERVICE_NAME="${SERVICE_NAME:-rpi-gpio}"
-OLED_SERVICE_NAME="${OLED_SERVICE_NAME:-oled-status}"
-EXTRAS="${EXTRAS:-}"            # e.g. "rpi"
-PI_USER="$(id -un)"
+SERVICE_NAME="${SERVICE_NAME:-rpi-gpio}"  # unused now; kept for logs
+EXTRAS="${EXTRAS:-}"
+RUNNER="${RUNNER:-tmux}"
+OLED_ADDR="${OLED_ADDR:-0x3C}"
+OLED_REFRESH="${OLED_REFRESH:-5}"
+OLED_DEVICE="${OLED_DEVICE:-i2c}"
 
-# --------- guards ----------
 if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
   echo "Please run as a normal user (not sudo). I'll sudo only when needed."
   exit 1
 fi
 
-is_pi() {
-  [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model
-}
+have() { command -v "$1" >/dev/null 2>&1; }
+is_pi() { [[ -f /proc/device-tree/model ]] && grep -qi 'raspberry pi' /proc/device-tree/model; }
 
-# --------- 1) base deps ----------
-echo "[1/6] apt install base deps..."
+echo "[1/4] apt install base deps…"
 sudo apt-get update -y
 sudo apt-get install -y --no-install-recommends \
-  python3 python3-venv python3-pip python3-dev \
-  git build-essential libffi-dev libssl-dev ca-certificates
-
-# OLED/i2c helpers (harmless elsewhere)
-if is_pi; then
-  sudo apt-get install -y --no-install-recommends i2c-tools python3-smbus raspi-config || true
+  python3 python3-venv python3-pip git build-essential libffi-dev libssl-dev ca-certificates \
+  i2c-tools libjpeg-dev zlib1g-dev libopenjp2-7 libtiff5
+if [[ "$RUNNER" == "tmux" ]] && ! have tmux; then
+  sudo apt-get install -y tmux
 fi
 
-# --------- 2) fetch/update repo ----------
-echo "[2/6] fetch code into ${APP_DIR}..."
+echo "[2/4] fetch code into ${APP_DIR}…"
 if [[ -d "$APP_DIR/.git" ]]; then
   git -C "$APP_DIR" fetch --all --prune
   git -C "$APP_DIR" checkout "$BRANCH"
@@ -43,8 +52,7 @@ else
   git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
 fi
 
-# --------- 3) venv + deps ----------
-echo "[3/6] venv + python deps from pyproject.toml..."
+echo "[3/4] venv + python deps from pyproject.toml…"
 if [[ ! -d "$APP_DIR/.venv" ]]; then
   python3 -m venv "$APP_DIR/.venv"
 fi
@@ -52,7 +60,7 @@ fi
 source "$APP_DIR/.venv/bin/activate"
 python -m pip install --upgrade pip wheel setuptools
 
-# Choose extras: default to rpi on a Pi unless caller already set EXTRAS
+# Decide extras: default to rpi on Raspberry Pi unless EXTRAS was provided
 if [[ -z "$EXTRAS" ]] && is_pi; then
   EXTRAS="rpi"
 fi
@@ -64,65 +72,58 @@ else
   python -m pip install -e .
 fi
 
-# --------- 4) groups & features ----------
-echo "[4/6] ensure groups & data dir..."
+echo "[4/4] prepare data dir + run apps…"
 mkdir -p "$APP_DIR/data/logs"
-# Add user to gpio/i2c (ok if already a member)
-sudo usermod -aG gpio "$PI_USER" || true
-sudo usermod -aG i2c  "$PI_USER" || true
 
-# Enable I2C on Raspberry Pi OS (best-effort)
-if is_pi; then
-  if command -v raspi-config >/dev/null 2>&1; then
-    sudo raspi-config nonint do_i2c 0 || true
-  fi
-  # Ensure dtparam on both possible locations (Bookworm vs. legacy)
-  for CFG in /boot/firmware/config.txt /boot/config.txt; do
-    if [[ -f "$CFG" ]] && ! grep -q '^dtparam=i2c_arm=on' "$CFG"; then
-      echo 'dtparam=i2c_arm=on' | sudo tee -a "$CFG" >/dev/null || true
-    fi
-  done
+# Helpful I2C hint
+if is_pi && [[ ! -e /dev/i2c-1 ]]; then
+  echo "⚠️  /dev/i2c-1 not found. Enable I2C first:"
+  echo "    sudo raspi-config nonint do_i2c 0   (or via GUI raspi-config → Interface Options → I2C)"
 fi
 
-# --------- 5) install systemd units ----------
-echo "[5/6] install systemd services..."
-RPI_UNIT_SRC="$APP_DIR/rpi-gpio@.service"
-OLED_UNIT_SRC="$APP_DIR/oled-status@.service"
+start_tmux() {
+  local sess="rpi"
+  # Create session (detached)
+  tmux new-session -d -s "$sess" -c "$APP_DIR"
+  tmux rename-window -t "$sess:0" 'web'
+  tmux send-keys    -t "$sess:0" 'source .venv/bin/activate && python -m src' C-m
 
-if [[ ! -f "$RPI_UNIT_SRC" ]]; then
-  echo "ERROR: $RPI_UNIT_SRC not found. Commit rpi-gpio@.service to the repo."; exit 2; fi
-if [[ ! -f "$OLED_UNIT_SRC" ]]; then
-  echo "ERROR: $OLED_UNIT_SRC not found. Commit oled-status@.service to the repo."; exit 2; fi
+  tmux new-window   -t "$sess:1" -n 'oled' -c "$APP_DIR"
+  tmux send-keys    -t "$sess:1" "source .venv/bin/activate && python -m src.oled_status --device ${OLED_DEVICE} --addr ${OLED_ADDR} --refresh ${OLED_REFRESH}" C-m
 
-# Copy units from repo root into /etc/systemd/system
-sudo install -m 0644 -D "$APP_DIR/rpi-gpio@.service"   "/etc/systemd/system/rpi-gpio@.service"
-sudo install -m 0644 -D "$APP_DIR/oled-status@.service" "/etc/systemd/system/oled-status@.service" || true
+  echo
+  echo "✅ Started in tmux session 'rpi'."
+  echo "   Attach: tmux attach -t rpi"
+  echo "   Stop:   tmux kill-session -t rpi"
+}
 
-# Reload and (re)enable for the current user
-ME="$(id -un)"
-sudo systemctl daemon-reload
-sudo systemctl stop    "rpi-gpio@${ME}.service" 2>/dev/null || true
-sudo systemctl reset-failed "rpi-gpio@${ME}.service" || true
-sudo systemctl enable --now "rpi-gpio@${ME}.service"
+start_nohup() {
+  (cd "$APP_DIR"; nohup "$APP_DIR/.venv/bin/python" -m src \
+      >> "$APP_DIR/data/logs/web.out" 2>&1 & echo $! > "$APP_DIR/web.pid")
+  (cd "$APP_DIR"; nohup "$APP_DIR/.venv/bin/python" -m src.oled_status \
+      --device "${OLED_DEVICE}" --addr "${OLED_ADDR}" --refresh "${OLED_REFRESH}" \
+      >> "$APP_DIR/data/logs/oled.out" 2>&1 & echo $! > "$APP_DIR/oled.pid")
+  echo
+  echo "✅ Started with nohup:"
+  echo "   Web PID : $(cat "$APP_DIR/web.pid")"
+  echo "   OLED PID: $(cat "$APP_DIR/oled.pid")"
+  echo "   Logs:    tail -f $APP_DIR/data/logs/web.out  $APP_DIR/data/logs/oled.out"
+  echo "   Stop:    kill \$(cat $APP_DIR/web.pid) \$(cat $APP_DIR/oled.pid)"
+}
 
-# Optional: OLED
-sudo systemctl enable --now "oled-status@${ME}.service"
-sudo systemctl daemon-reload
+start_fg() {
+  echo "Starting web interface in foreground (Ctrl+C to stop)…"
+  (cd "$APP_DIR"; source .venv/bin/activate; python -m src)
+}
 
-echo "[6/6] enable/launch services for user '${PI_USER}'…"
-sudo systemctl enable --now "rpi-gpio@${PI_USER}.service"
-
-# OLED service will be skipped if /dev/i2c-1 is absent (ConditionPathExists)
-sudo systemctl enable --now "oled-status@${PI_USER}.service" || true
-
-# Status (non-fatal)
-echo
-systemctl --no-pager -l status "rpi-gpio@${PI_USER}.service"  || true
-systemctl --no-pager -l status "oled-status@${PI_USER}.service" || true
+case "$RUNNER" in
+  tmux)  start_tmux ;;
+  nohup) start_nohup ;;
+  fg)    start_fg ;;
+  *)     echo "Unknown RUNNER='$RUNNER' (use tmux|nohup|fg)"; exit 2 ;;
+esac
 
 IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo
-echo "Ready."
-echo "- Web UI:  http://${IP:-localhost}:5000"
-echo "- Logs:    sudo journalctl -fu rpi-gpio@${PI_USER}.service"
-echo "- OLED:    sudo journalctl -fu oled-status@${PI_USER}.service"
+echo "Open the Web UI:  http://${IP:-localhost}:5000"
+echo "Repo: $REPO_URL  (branch: $BRANCH)"

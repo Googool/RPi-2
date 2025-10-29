@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import time, socket, subprocess, re
 import board, busio, digitalio
+from PIL import Image, ImageDraw, ImageFont
 from adafruit_ssd1305 import SSD1305_I2C
 
 WIDTH, HEIGHT = 128, 32        # Product 4567 is 128x32
@@ -39,13 +40,19 @@ def main():
     reset = digitalio.DigitalInOut(RST_PIN)
     disp = SSD1305_I2C(WIDTH, HEIGHT, i2c, addr=I2C_ADDR, reset=reset)
 
+
+    image = Image.new("1", (disp.width, disp.height))
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default()
+
     # Draw helper
     def draw(lines):
-        disp.fill(0)
+        draw.rectangle((0, 0, disp.width, disp.height), outline=0, fill=0)
         y = 0
-        for line in lines[: (HEIGHT // 8)]:  # 8px text rows
-            disp.text(line[:21], 0, y, 1)    # ~21 chars across at 6x8/8x8 font
-            y += 16                          # 16px spacing for readability
+        for line in lines:
+            draw.text((0, y), line[:21], font=font, fill=255)
+            y += 10
+        disp.image(image)
         disp.show()
 
     host = get_hostname()
